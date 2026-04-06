@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國立屏北高中-語文競賽抽籤系統</title>
+    <!-- 引入外部資源 CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide-react/dist/umd/lucide-react.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Serif TC', serif;
+        }
+
+        @keyframes surprising-pop {
+            0% { opacity: 0; transform: scale(0.4) rotate(-5deg); filter: blur(10px); }
+            70% { opacity: 1; transform: scale(1.1) rotate(2deg); filter: blur(0px); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes confetti-burst {
+            0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) rotate(var(--rot)); opacity: 0; }
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes reverse-spin-slow {
+            from { transform: rotate(360deg); }
+            to { transform: rotate(0deg); }
+        }
+        @keyframes width-expand {
+            from { width: 0; opacity: 0; }
+            to { width: 16rem; opacity: 0.6; }
+        }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(-10px); } 
+            to { opacity: 0.9; transform: translateY(0); } 
+        }
+
+        .animate-surprising-pop { animation: surprising-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .animate-confetti-burst { animation: confetti-burst 1.5s forwards cubic-bezier(0, 1, 0.5, 1); }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+        .animate-reverse-spin-slow { animation: reverse-spin-slow 15s linear infinite; }
+        .animate-width-expand { animation: width-expand 1.5s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 1.5s ease-out forwards; }
+
+        @media print { .no-print { display: none !important; } }
+        
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #f8fafc; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; border: 3px solid #f8fafc; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-[#f4f7f9] text-[#2c3e50]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { Shuffle, Download, Camera, School, BookOpen, Trophy, RotateCcw } = lucideReact;
+
+        const App = () => {
+            const [competitionName, setCompetitionName] = useState('');
+            const [contestantInput, setContestantInput] = useState('');
+            const [results, setResults] = useState([]);
+            const [isDrawn, setIsDrawn] = useState(false);
+            const [errorMessage, setErrorMessage] = useState('');
+            const resultRef = useRef(null);
+            
+            // 倒數相關狀態
+            const [isCountingDown, setIsCountingDown] = useState(false);
+            const [countdown, setCountdown] = useState(3);
+            const [showConfetti, setShowConfetti] = useState(false);
+
+            const shuffle = (array) => {
+                const newArray = [...array];
+                for (let i = newArray.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+                }
+                return newArray;
+            };
+
+            const parseContestants = (input) => {
+                return input
+                    .split(/[\n,，]+/)
+                    .map(item => item.trim())
+                    .filter(item => item !== '');
+            };
+
+            const startDrawSequence = () => {
+                setErrorMessage('');
+                if (!contestantInput.trim()) {
+                    setErrorMessage('請先輸入名單內容。');
+                    return;
+                }
+                const participants = parseContestants(contestantInput);
+                if (participants.length === 0) {
+                    setErrorMessage('偵測不到有效的選手名單。');
+                    return;
+                }
+
+                setIsCountingDown(true);
+                setCountdown(3);
+                setIsDrawn(false);
+                setShowConfetti(false);
+            };
+
+            // 重置功能：回到初始狀態
+            const handleNewDraw = () => {
+                setResults([]);
+                setContestantInput('');
+                setCompetitionName('');
+                setIsDrawn(false);
+                setErrorMessage('');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const handleGoBack = () => {
+                setIsDrawn(false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            // 倒數計時邏輯與驚喜效果
+            useEffect(() => {
+                let timer;
+                if (isCountingDown && countdown > 0) {
+                    timer = setTimeout(() => {
+                        setCountdown(prev => prev - 1);
+                    }, 1000);
+                } else if (isCountingDown && countdown === 0) {
+                    setShowConfetti(true);
+                    
+                    const participants = parseContestants(contestantInput);
+                    const shuffled = shuffle(participants);
+                    const finalResults = shuffled.map((info, index) => ({
+                        order: index + 1,
+                        info: info
+                    }));
+
+                    setTimeout(() => {
+                        setResults(finalResults);
+                        setIsDrawn(true);
+                        setIsCountingDown(false);
+                        setShowConfetti(false);
+                    }, 1800); 
+                }
+                return () => clearTimeout(timer);
+            }, [isCountingDown, countdown, contestantInput]);
+
+            const handleSaveImage = () => {
+                if (!window.html2canvas) return;
+                const element = resultRef.current;
+                window.html2canvas(element, {
+                    backgroundColor: "#ffffff",
+                    scale: 2,
+                    logging: false,
+                }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = `屏北高中_${competitionName || '語文競賽'}_結果.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+            };
+
+            const handleExportCSV = () => {
+                if (results.length === 0) return;
+                let csvContent = "\ufeff序號,班級,座號,姓名\n";
+                results.forEach(item => {
+                    const parts = item.info.split(/\s+/).filter(p => p !== '');
+                    let c = '', s = '', n = '';
+                    if (parts.length >= 3) { [c, s, ...n] = parts; n = n.join(' '); }
+                    else if (parts.length === 2) { [c, n] = parts; }
+                    else { n = parts[0] || ''; }
+                    csvContent += `${item.order},${c},${s},${n}\n`;
+                });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.setAttribute("href", URL.createObjectURL(blob));
+                link.setAttribute("download", `${competitionName || '抽籤結果'}.csv`);
+                link.click();
+            };
+
+            const getFormattedDateTime = () => {
+                const now = new Date();
+                return `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`;
+            };
+
+            return (
+                <div className="min-h-screen font-serif text-[#2c3e50] selection:bg-[#d4af37]/20">
+                    
+                    {/* 驚喜倒數畫面 */}
+                    {isCountingDown && (
+                        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a101a] overflow-hidden">
+                            <div className="absolute w-[800px] h-[800px] border border-[#d4af37]/5 rounded-full animate-spin-slow"></div>
+                            <div className="absolute w-[600px] h-[600px] border border-[#d4af37]/10 rounded-full animate-reverse-spin-slow"></div>
+                            
+                            {showConfetti && (
+                                <div className="absolute inset-0 pointer-events-none">
+                                    {[...Array(30)].map((_, i) => (
+                                        <div 
+                                            key={i} 
+                                            className="absolute bg-[#d4af37] w-2 h-2 rounded-full animate-confetti-burst"
+                                            style={{
+                                                left: '50%',
+                                                top: '50%',
+                                                '--tx': `${(Math.random() - 0.5) * 1000}px`,
+                                                '--ty': `${(Math.random() - 0.5) * 1000}px`,
+                                                '--rot': `${Math.random() * 360}deg`,
+                                                animationDelay: `${Math.random() * 0.2}s`
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="absolute top-20 text-center w-full px-10 animate-fade-in z-20">
+                                <h2 className="text-2xl md:text-5xl font-bold tracking-[0.8em] text-[#d4af37] opacity-90 uppercase drop-shadow-lg transition-all duration-1000">
+                                    {competitionName || '語文競賽'}
+                                </h2>
+                                <div className="h-[2px] w-64 bg-gradient-to-r from-transparent via-[#d4af37]/60 to-transparent mx-auto mt-8 animate-width-expand"></div>
+                            </div>
+                            
+                            <div className="relative flex items-center justify-center h-[500px] w-full z-10 text-center">
+                                <div key={countdown} className={`
+                                    ${countdown === 0 ? 'text-8xl md:text-[10rem] tracking-normal text-white' : 'text-[18rem] md:text-[25rem] text-[#d4af37]'} 
+                                    font-extrabold select-none transition-all duration-300 transform animate-surprising-pop drop-shadow-[0_0_60px_rgba(212,175,55,0.5)] w-full text-center
+                                `}>
+                                    {countdown > 0 ? countdown : "揭曉！"}
+                                </div>
+                            </div>
+
+                            <div className="absolute bottom-20 text-[#d4af37]/30 tracking-widest text-sm animate-pulse">
+                                FAIRNESS & INTEGRITY
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="max-w-5xl mx-auto py-12 px-6 lg:px-10">
+                        <div className="text-center mb-16 no-print">
+                            <div className="inline-flex items-center justify-center p-6 mb-6 bg-white rounded-full shadow-2xl transition-all hover:scale-110 border border-slate-50">
+                                <School className="text-[#1a2a40] w-16 h-16" />
+                            </div>
+                            <h1 className="text-4xl md:text-6xl font-extrabold text-[#1a2a40] tracking-widest drop-shadow-sm font-serif">
+                                國立屏北高中
+                                <span className="block md:inline text-2xl md:text-3xl font-medium text-[#d4af37] mt-4 md:mt-0 md:ml-4 tracking-normal opacity-80">
+                                    語文競賽抽籤系統
+                                </span>
+                            </h1>
+                        </div>
+
+                        {!isDrawn && !isCountingDown && (
+                            <div className="bg-white rounded-[40px] shadow-2xl border-t-[14px] border-[#1a2a40] overflow-hidden no-print transition-all duration-700">
+                                <div className="p-10 md:p-16 space-y-12">
+                                    <div className="flex items-center space-x-5 border-b pb-8">
+                                        <BookOpen className="text-[#d4af37] w-12 h-12" />
+                                        <span className="text-3xl md:text-4xl font-bold text-[#1a2a40]">名單匯入</span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 gap-10">
+                                        <div className="space-y-4">
+                                            <label className="text-sm font-bold text-slate-400 uppercase tracking-[0.3em] ml-2">比賽項目</label>
+                                            <input
+                                                type="text"
+                                                placeholder="請輸入項目名稱..."
+                                                className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-3xl focus:ring-2 focus:ring-[#d4af37] focus:bg-white outline-none transition-all text-2xl font-medium shadow-inner"
+                                                value={competitionName}
+                                                onChange={(e) => setCompetitionName(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="text-sm font-bold text-slate-400 uppercase tracking-[0.3em] ml-2">選手清單 (班級 座號 姓名)</label>
+                                            <textarea
+                                                placeholder="101 01 王小明&#10;102 05 李大華..."
+                                                rows="10"
+                                                className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-3xl focus:ring-2 focus:ring-[#d4af37] focus:bg-white outline-none transition-all font-mono text-xl shadow-inner leading-relaxed"
+                                                value={contestantInput}
+                                                onChange={(e) => setContestantInput(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {errorMessage && <div className="p-5 bg-red-50 text-red-500 rounded-2xl text-center font-bold border border-red-100">{errorMessage}</div>}
+
+                                    <button
+                                        onClick={startDrawSequence}
+                                        className="group w-full bg-[#1a2a40] hover:bg-[#151f2e] text-[#d4af37] font-bold py-8 rounded-[30px] transition-all flex items-center justify-center text-3xl shadow-2xl border border-[#d4af37]/30 transform active:scale-95"
+                                    >
+                                        <Shuffle className="mr-5 w-10 h-10 group-hover:rotate-180 transition-transform duration-700" /> 啟動隨機抽籤
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {isDrawn && !isCountingDown && (
+                            <div className="space-y-12 transition-all duration-1000">
+                                <div ref={resultRef} className="bg-white rounded-[40px] shadow-2xl border border-slate-200 overflow-hidden">
+                                    <div className="p-12 md:p-20 text-center bg-[#fdfbf7] border-b-[10px] border-[#1a2a40]">
+                                        <h2 className="text-4xl font-bold text-[#1a2a40] mb-6 font-serif">國立屏北高中 語文競賽</h2>
+                                        <div className="inline-block px-16 py-5 border-y-2 border-[#d4af37] text-4xl md:text-5xl font-black text-slate-800 tracking-widest shadow-sm">
+                                            {competitionName || '抽籤結果展示'}
+                                        </div>
+                                        <div className="mt-12 text-base md:text-lg text-slate-500 font-sans tracking-[0.4em] uppercase font-bold opacity-80">
+                                            Draw Recorded At: {getFormattedDateTime()}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-0">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="bg-[#1a2a40] text-[#d4af37]">
+                                                    <th className="py-8 px-8 text-center w-48 text-2xl border-r border-[#d4af37]/20 uppercase tracking-widest">序號</th>
+                                                    <th className="py-8 px-10 text-center text-2xl tracking-[0.5em]">參賽選手資訊</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {results.map((item) => (
+                                                    <tr key={item.order} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                                                        <td className="py-14 px-8 text-center font-black text-7xl text-[#1a2a40] tabular-nums border-r border-slate-50">
+                                                            {item.order}
+                                                        </td>
+                                                        <td className="py-14 px-10 text-center text-5xl md:text-6xl font-bold text-[#2c3e50] tracking-wider">
+                                                            {item.info}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div className="p-12 text-center text-sm md:text-base text-slate-300 italic bg-white tracking-[0.6em] uppercase border-t border-slate-50 font-sans font-medium">
+                                        Fairness · Accuracy · Transparency · PingPei High School
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-6 justify-center no-print pb-24 text-center">
+                                    <button onClick={handleExportCSV} className="bg-white border-2 border-slate-200 px-12 py-6 rounded-[25px] font-bold text-slate-600 flex items-center hover:bg-slate-100 transition-all shadow-sm text-xl active:scale-95">
+                                        <Download size={28} className="mr-4" /> 匯出 CSV
+                                    </button>
+                                    <button onClick={handleSaveImage} className="bg-[#1a2a40] text-[#d4af37] px-14 py-6 rounded-[25px] font-bold flex items-center hover:shadow-2xl hover:bg-[#253955] transition-all shadow-lg text-xl active:scale-95">
+                                        <Camera size={28} className="mr-4" /> 儲存結果圖
+                                    </button>
+                                    <div className="flex gap-4">
+                                        <button onClick={handleGoBack} className="bg-white border-2 border-slate-200 px-8 py-6 rounded-[25px] font-bold text-slate-400 flex items-center hover:bg-slate-100 transition-all shadow-sm text-lg active:scale-95">
+                                            回名單
+                                        </button>
+                                        <button onClick={handleNewDraw} className="bg-white border-2 border-emerald-600 text-emerald-600 px-12 py-6 rounded-[25px] font-bold flex items-center hover:bg-emerald-50 transition-all shadow-sm text-xl active:scale-95">
+                                            <RotateCcw size={28} className="mr-4" /> 重開抽籤
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-12 text-center no-print opacity-20 text-[10px] tracking-[0.8em] font-sans">
+                            LANGUAGE COMPETITION AUTOMATED SYSTEM
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
